@@ -39,7 +39,7 @@ The sections below are ordered to match this list exactly — read top to bottom
 - [ ] 1. Schema — reuse or re-run `users` / `follows` / `posts` in Postgres
 - [x] 2. Backend: DB connection pool — `backend/app/db.py`
 - [ ] 3. Backend: Validation + Feed query builder, **TDD** — `backend/app/validation.py`, `backend/app/feed.py`, `backend/tests/test_validation.py`, `backend/tests/test_feed.py` — **stop for a design check-in before merging**; the feed query is what Phase 1's load test measures
-- [ ] 4. Backend: Routes — `backend/app/routes/{posts,follow,feed}.py`
+- [ ] 4. Backend: Routes — `backend/app/routes/{posts,follow,feed}.py` - tested with - "curl "http://127.0.0.1:5000/feed?userId=f6d85a30-64eb-4ee7-9398-b826d789a229"
 - [ ] 5. Backend: Seed script — `backend/scripts/seed.py`
 - [ ] 6. Frontend: Vite + React scaffold — `frontend/`
 - [ ] 7. Frontend: wire up fetch calls to the three endpoints
