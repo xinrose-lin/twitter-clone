@@ -1,0 +1,7 @@
+flask
+flask-cors
+psycopg[binary,pool]
+pydantic
+python-dotenv
+pytest
+ruff
