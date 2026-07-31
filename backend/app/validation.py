@@ -17,3 +17,7 @@ class FollowRequest(BaseModel):
         if self.follower_id == self.following_id: 
             raise ValueError("Cannot follow yourself")
         return self
+
+class FeedQuery(BaseModel):
+    user_id: UUID
+    cursor: Optional[datetime] = None
