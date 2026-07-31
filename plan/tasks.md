@@ -34,10 +34,10 @@ Resist adding these even if they'd be easy right now — each has a later phase 
 
 The sections below are ordered to match this list exactly — read top to bottom, build top to bottom.
 
-- [ ] 10. CI: `.github/workflows/ci.yml` (lint + test both apps on every PR) — do this first, expect it to fail until step 6 exists, then merge and turn on branch protection
-- [ ] 0. Repo setup — `.gitignore`, folder structure
+- [ ] 10. CI: `.github/workflows/ci.yml` (lint + test both apps on every PR) — do this first, expect it to fail until step 6 exists, then merge and turn on branch protection — **in progress**: workflow pushed on `chore/ci-pipeline`, fixing `ruff check` failures before merge
+- [x] 0. Repo setup — `.gitignore`, folder structure
 - [ ] 1. Schema — reuse or re-run `users` / `follows` / `posts` in Postgres
-- [ ] 2. Backend: DB connection pool — `backend/app/db.py`
+- [x] 2. Backend: DB connection pool — `backend/app/db.py`
 - [ ] 3. Backend: Validation + Feed query builder, **TDD** — `backend/app/validation.py`, `backend/app/feed.py`, `backend/tests/test_validation.py`, `backend/tests/test_feed.py` — **stop for a design check-in before merging**; the feed query is what Phase 1's load test measures
 - [ ] 4. Backend: Routes — `backend/app/routes/{posts,follow,feed}.py`
 - [ ] 5. Backend: Seed script — `backend/scripts/seed.py`
