@@ -1,9 +1,9 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, jsonify, request
 from pydantic import ValidationError
 
 from app.db import pool
-from app.validation import FeedQuery
 from app.feed import build_feed_query
+from app.validation import FeedQuery
 
 feed_bp = Blueprint("feed", __name__)
 

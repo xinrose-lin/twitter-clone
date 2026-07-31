@@ -1,7 +1,7 @@
 ## web server gateway interface - entry point for app 
 ## liek a run.py but for prod ?
 
-from app import create_app 
+from app import create_app
 
 app = create_app()
 

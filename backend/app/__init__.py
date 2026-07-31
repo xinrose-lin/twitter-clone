@@ -1,11 +1,11 @@
 from flask import Flask
 from flask_cors import CORS
 
-from app.routes.posts import posts_bp
-from app.routes.follow import follow_bp
+from app.db import pool
 from app.routes.feed import feed_bp
+from app.routes.follow import follow_bp
+from app.routes.posts import posts_bp
 
-from app.db import pool 
 
 def create_app():
     app = Flask(__name__)
