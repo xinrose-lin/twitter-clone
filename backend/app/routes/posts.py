@@ -1,7 +1,7 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, jsonify, request
 from pydantic import ValidationError
 
-from app.db import pool 
+from app.db import pool
 from app.validation import CreatePostRequest
 
 posts_bp = Blueprint("posts", __name__)
