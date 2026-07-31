@@ -1,7 +1,8 @@
-from uuid import UUID
-from typing import Optional 
 from datetime import datetime
+from uuid import UUID
+
 from pydantic import BaseModel, Field, model_validator
+
 
 class CreatePostRequest(BaseModel):
     author_id: UUID
@@ -20,4 +21,4 @@ class FollowRequest(BaseModel):
 
 class FeedQuery(BaseModel):
     user_id: UUID
-    cursor: Optional[datetime] = None
+    cursor: datetime | None = None

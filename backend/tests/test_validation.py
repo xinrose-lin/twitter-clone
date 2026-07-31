@@ -1,9 +1,10 @@
 import uuid
+
 import pytest
 from pydantic import ValidationError
 
-from app.validation import CreatePostRequest
-from app.validation import FollowRequest
+from app.validation import CreatePostRequest, FollowRequest
+
 
 def test_rejects_empty_content():
     with pytest.raises(ValidationError):

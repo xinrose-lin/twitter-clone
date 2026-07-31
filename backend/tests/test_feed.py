@@ -1,5 +1,6 @@
 from app.feed import build_feed_query
 
+
 def test_build_feed_query_no_cursor():
     text, params = build_feed_query("user-1")
     assert params == ["user-1"]
