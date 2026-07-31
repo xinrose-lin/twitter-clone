@@ -3,7 +3,7 @@
 Stack: **Python + Flask + `psycopg` (no ORM) + Postgres backend, React (Vite) frontend**
 Same architecture as `architecture.md` — this is a language/framework swap, not a redesign. If you already ran the schema in the first (Next.js) spike, you can reuse that same Postgres database; the tables don't change.
 
-Goal: same naive, working feed (create post → follow → view feed) as the first spike, but this time also used as a vehicle to practice a real branch → PR → CI workflow. This is **Phase 0** of `roadmap.md`'s phased plan — fan-out-on-read, no cache, no Docker, no auth hardening. Those are deliberately deferred to later phases; see "What NOT to do in Phase 0" below.
+Goal: same naive, working feed (create post → follow → view feed) as the first spike, but this time also used as a vehicle to practice a real branch → PR → CI workflow, and a test-driven-development loop for anything that's pure logic. This is **Phase 0** of `roadmap.md`'s phased plan — fan-out-on-read, no cache, no Docker, no auth hardening. Those are deliberately deferred to later phases; see "What NOT to do in Phase 0" below.
 
 ---
 
@@ -32,113 +32,44 @@ Resist adding these even if they'd be easy right now — each has a later phase 
 
 ## Progress — execution order
 
-CI goes **first**, not last (step 10 further down is the code for it, but build it before everything else). Standing up the pipeline against a near-empty app is cheap, and it means every subsequent PR is CI-gated from the start instead of retrofitted at the end. The numbers below match the `##` section headers later in this doc, just reordered.
+The sections below are ordered to match this list exactly — read top to bottom, build top to bottom.
 
 - [ ] 10. CI: `.github/workflows/ci.yml` (lint + test both apps on every PR) — do this first, expect it to fail until step 6 exists, then merge and turn on branch protection
 - [ ] 0. Repo setup — `.gitignore`, folder structure
 - [ ] 1. Schema — reuse or re-run `users` / `follows` / `posts` in Postgres
 - [ ] 2. Backend: DB connection pool — `backend/app/db.py`
-- [ ] 3. Backend: Validation — `backend/app/validation.py`
-- [ ] 4. Backend: Feed query builder — `backend/app/feed.py` — **stop for a design check-in before merging**; this is the query Phase 1's load test measures
-- [ ] 5. Backend: Tests — `backend/tests/test_feed.py`
-- [ ] 6. Backend: Routes — `backend/app/routes/{posts,follow,feed}.py`
-- [ ] 7. Backend: Seed script — `backend/scripts/seed.py`
-- [ ] 8. Frontend: Vite + React scaffold — `frontend/`
-- [ ] 9. Frontend: wire up fetch calls to the three endpoints
-- [ ] 12. Deploy — backend to Fly.io/Render, frontend to Vercel (do this as soon as 0–9 are mergeable, don't save it for the end)
-- [ ] 11. Manual end-to-end verification (seed → curl → browser, against the deployed app, not just localhost)
+- [ ] 3. Backend: Validation + Feed query builder, **TDD** — `backend/app/validation.py`, `backend/app/feed.py`, `backend/tests/test_validation.py`, `backend/tests/test_feed.py` — **stop for a design check-in before merging**; the feed query is what Phase 1's load test measures
+- [ ] 4. Backend: Routes — `backend/app/routes/{posts,follow,feed}.py`
+- [ ] 5. Backend: Seed script — `backend/scripts/seed.py`
+- [ ] 6. Frontend: Vite + React scaffold — `frontend/`
+- [ ] 7. Frontend: wire up fetch calls to the three endpoints
+- [ ] 8. Deploy — backend to Fly.io/Render, frontend to Vercel (do this as soon as the steps above are mergeable, don't save it for the end)
+- [ ] 9. Manual end-to-end verification (seed → curl → browser, against the deployed app, not just localhost)
 
----
-
-## Understanding Git — core concepts
-
-You asked to actually understand this, not just copy commands, so here's the mental model. Everything else in this doc (branches, PRs, CI) is built on these five ideas:
-
-| Concept | What it actually is |
-|---|---|
-| **Commit** | An immutable snapshot of the whole repo at a point in time, plus a pointer to its parent commit(s). History is a chain of these. |
-| **Branch** | Just a movable label pointing at one commit. `main` is not special to git — it's a branch by convention. Creating a branch is instant and cheap (it's not a copy of files). |
-| **HEAD** | A pointer to "where you are right now" — normally it points at a branch, which points at a commit. |
-| **Staging area (the index)** | `git add` doesn't commit — it moves changes into a holding area. `git commit` snapshots *what's staged*, not everything you've changed. This is what lets you commit half your changes and leave the rest for later. |
-| **Remote (`origin`)** | A copy of the repo's history living elsewhere (GitHub, in your case). Your local repo and GitHub only sync when you tell them to: `git push` (local → remote), `git pull` (remote → local, = fetch + merge), `git fetch` (remote → local, but don't merge yet — just look). |
-
-Two more that matter once you're branching:
-
-- **Merge**: combine two branches' histories into one, creating a new commit with two parents. Nothing is rewritten — safe on shared branches.
-- **Rebase**: replay your branch's commits one-by-one on top of another branch's tip, as if you'd started there. Produces a straight line, no merge commit — but it *rewrites* commit hashes. Rule of thumb: rebase your own not-yet-pushed or not-yet-shared branch to keep it current with `main`; never rebase a branch someone else is also working on.
-- **Pull Request (PR)**: not a git concept at all — it's a GitHub feature. It's a UI wrapper around "merge branch A into branch B" that adds a diff view, comments, and (critically) a gate: required CI checks and/or reviews before the merge button unlocks.
-
-The commands you'll actually type, in order, every single feature:
-
-```bash
-git checkout main && git pull          # start from the latest main
-git checkout -b feat/some-small-thing  # branch, cheap and instant
-# ...edit files...
-git status                             # see what changed
-git diff                               # see the actual line changes
-git add backend/app/validation.py      # stage specific files (not -A — be deliberate)
-git commit -m "Add pydantic validation schemas"
-git push -u origin feat/some-small-thing   # -u sets the upstream, only needed the first push
-```
-
-Then open a PR (`gh pr create --fill` or the GitHub UI), let CI run, review your own diff, merge, then:
-
-```bash
-git checkout main && git pull
-git branch -d feat/some-small-thing    # delete the now-merged local branch
-```
-
----
-
-## Should you be using PRs? Yes — even solo
-
-A PR gate isn't about needing someone else's approval. Solo, it buys you three things:
-
-1. **A forced second look.** Reading your own diff in GitHub's UI, outside your editor, catches things a self-review inside VS Code doesn't — leftover `print()`s, a variable you meant to rename, an accidental file.
-2. **CI runs automatically before anything touches `main`.** Once you wire up step 10 below, every PR gets tested before it's mergeable — `main` stays in a state you could deploy at any moment.
-3. **A real history.** `git log --oneline main` becomes a changelog of actual features, not "wip", "fix", "asdf".
-
-### Can you build features "in parallel"?
-
-Two different things people mean by this:
-
-**1. Sequenced-but-independent branches (the one you'll actually use).** Nothing stops you from cutting `feat/flask-routes` off `main` while `feat/react-scaffold`'s PR is still open waiting on CI or your own review. Branches are cheap — cut one per checklist item above, each becomes a small, easy-to-review PR (rule of thumb: keep diffs under ~300–400 lines; if a branch is ballooning, that's a sign to land part of it and split the rest).
-
-**2. Literally simultaneous, on disk — `git worktree`.** Normally a folder can only have one branch checked out at a time. `git worktree add ../twitter-clone-feed feat/flask-feed-query` checks out a *second* branch into a *second* folder, both sharing the same `.git` history underneath. That means two editor windows, two branches, no stashing to switch context — genuinely useful once you have, say, a long test suite running against one branch while you write code on another. For this project's size, #1 is where the real value is; worktrees are worth knowing about, not necessary yet.
-
-**Suggested branch-per-checklist-item mapping for this doc:**
+**Suggested branch-per-checklist-item mapping:**
 
 ```
 main                              ← protected, always green
  ├─ chore/ci-pipeline             (step 10 — build this first)
  ├─ chore/repo-setup              (step 0)
  ├─ feat/flask-db-connection      (steps 1–2)
- ├─ feat/flask-validation-feed    (steps 3–4, written + tested together)
- ├─ feat/flask-routes             (step 6)
- ├─ chore/seed-script             (step 7)
- ├─ feat/react-scaffold           (step 8)
- ├─ feat/react-api-integration    (step 9)
- └─ chore/deploy                  (step 12)
+ ├─ feat/flask-validation-feed    (step 3 — TDD, written + tested together)
+ ├─ feat/flask-routes             (step 4)
+ ├─ chore/seed-script             (step 5)
+ ├─ feat/react-scaffold           (step 6)
+ ├─ feat/react-api-integration    (step 7)
+ └─ chore/deploy                  (step 8)
 ```
+
+Commit checkpoint, as a rule of thumb: commit at every point `pytest` (or the equivalent frontend check) is green, not mid-red and not "whenever I remember." One passing behavior → one commit. See the TDD loop in step 3 and the git workflow in the appendix for the mechanics.
 
 ---
 
-## DevOps: GitHub CI/CD
+## 10. CI pipeline
 
-### Branch protection (do this once, in the GitHub UI)
+Runs on every push and PR, spins up a real Postgres for the backend tests (not mocked), lints and tests both apps.
 
-`github.com/xinrose-lin/twitter-clone` → **Settings → Branches → Add branch protection rule**, pattern `main`:
-
-- ✅ Require a pull request before merging
-- ✅ Require status checks to pass before merging → select the CI job(s) from step 10 once they've run once
-- ✅ Require branches to be up to date before merging
-- ✅ Do not allow bypassing the above settings (applies the rule to you too — good, that's the point)
-- ❌ Skip "require approvals" — GitHub won't let you approve your own PR anyway, and there's no one else on this repo yet
-
-### CI workflow — `.github/workflows/ci.yml`
-
-Runs on every push and PR, spins up a real Postgres for the backend tests (not mocked), lints and tests both apps:
-
+`.github/workflows/ci.yml`:
 ```yaml
 name: CI
 
@@ -200,27 +131,26 @@ jobs:
       - run: npm run build
 ```
 
-**Why a real Postgres service container, not a mock:** the whole point of the feed query is SQL correctness (the join, the index, the ordering). Mocking the DB would test that you *called* a mock correctly, not that the query works — same reasoning as `[[the "don't mock the database" lesson]]` if you've hit that before.
+**Why a real Postgres service container, not a mock:** the whole point of the feed query is SQL correctness (the join, the index, the ordering). Mocking the DB would test that you *called* a mock correctly, not that the query works.
 
 **Why `concurrency` + `cancel-in-progress`:** if you push twice to the same PR quickly (common when fixing a lint error), this cancels the stale run instead of wasting CI minutes on code you've already superseded.
 
-### Other DevOps practices worth adopting here
+Push this on `chore/ci-pipeline`, open the PR, watch both jobs go green (backend will fail until step 4's routes exist — that's expected), then merge and turn on branch protection:
 
-- **Secrets never in git.** `backend/.env` (holds `DATABASE_URL`) goes in `.gitignore`; commit a `backend/.env.example` with the shape but no real value instead. The *test* `DATABASE_URL` above is thrown away every CI run (fresh container), so it's fine to keep the dummy `postgres:postgres` credentials in plaintext in the workflow file — anything real (a production deploy key, later) goes in **Settings → Secrets and variables → Actions**, referenced as `${{ secrets.NAME }}`.
-- **Dependabot** (`.github/dependabot.yml`) — opens automatic PRs bumping `requirements.txt`/`package.json` versions, gated by the same CI job. Cheap to add, catches drift before it becomes a big-bang upgrade.
-- **Conventional commit messages** (`feat: add feed route`, `fix: off-by-one in cursor`, `chore: bump ruff`) — not enforced by anything here, just a habit that makes `git log` skimmable later.
-- **Deploy pipeline is a deliberately separate, later step.** Once there's something worth shipping, a `deploy.yml` triggered on merge-to-`main` (Render/Fly.io/Railway for Flask, Vercel/Netlify for the Vite build) is the natural next piece — not needed to start building.
+`github.com/xinrose-lin/twitter-clone` → **Settings → Branches → Add branch protection rule**, pattern `main`:
+
+- ✅ Require a pull request before merging
+- ✅ Require status checks to pass before merging → select the CI job(s) once they've run once
+- ✅ Require branches to be up to date before merging
+- ✅ Do not allow bypassing the above settings (applies the rule to you too — good, that's the point)
+- ❌ Skip "require approvals" — GitHub won't let you approve your own PR anyway, and there's no one else on this repo yet
 
 ---
-```
-git checkout -b chore/repo-setup
-git add . 
-git commit -m "Add v2 architecture doc, tasks.md, and .gitignore for Flask/React stack"
 
-```
 ## 0. Repo setup
 
 ```bash
+git checkout -b chore/repo-setup
 mkdir -p backend/app/routes backend/scripts backend/tests
 ```
 
@@ -241,7 +171,12 @@ frontend/dist/
 .DS_Store
 ```
 
-Commit `architecture.md` (currently untracked) and this file together as your first commit on a `chore/repo-setup` branch, then open the first PR — good warm-up rep for the branch → PR → merge loop before any real logic is on the line.
+Commit `architecture.md`, `roadmap.md`, this file, and `.gitignore` together as your first commit, then open the first PR — good warm-up rep for the branch → PR → merge loop before any real logic is on the line.
+
+```bash
+git add plan/ .gitignore
+git commit -m "Add v2 architecture doc, tasks.md, and .gitignore for Flask/React stack"
+```
 
 ---
 
@@ -295,25 +230,84 @@ pool = ConnectionPool(
 
 **Why `row_factory=dict_row`:** by default psycopg returns rows as plain tuples (`(id, content, ...)`), which is unreadable and error-prone once you `jsonify()` it. `dict_row` gets you `{"id": ..., "content": ...}` instead — matches what `pg`'s `result.rows` gave you for free in the JS version.
 
+**Not TDD material:** this module has no branching logic of its own — it's wiring around a real Postgres connection. A unit test here would mean mocking `psycopg_pool`, which only proves you called the mock correctly, not that the pool works (same reasoning as the CI section's "why a real Postgres, not a mock"). It gets exercised for real once the routes and manual e2e verification (step 9) run against it.
+
 `backend/.env.example`:
 ```
 DATABASE_URL=postgresql://user:password@host/dbname
 ```
 
+Commit once this file exists and the pool imports cleanly (`python -c "from app.db import pool"` doesn't error):
+```bash
+git add backend/app/db.py backend/.env.example
+git commit -m "Add psycopg connection pool"
+```
+
 ---
 
-## 3. Backend: Validation — `backend/app/validation.py`
+## 3. Backend: Validation + Feed query builder — TDD
 
+`backend/app/validation.py` and `backend/app/feed.py` are pure functions — no Flask, no HTTP, no database. That makes them the right place to actually run a red → green → refactor loop, unlike step 2's `db.py`.
+
+**The loop, one behavior at a time:**
+
+1. **Red.** Write one test for one behavior. Run `pytest` — confirm it fails (import error or assertion failure, not a typo-error).
+2. **Green.** Write the smallest amount of implementation code that makes it pass. Don't add fields, branches, or validators nothing is testing yet.
+3. **Refactor.** With the test green, clean up the implementation if it needs it. Re-run `pytest` after every change — it must stay green.
+4. **Commit.** Only at a green state — never mid-red. One passing behavior → one commit.
+5. Repeat for the next behavior.
+
+### 3a. Validation — start here
+
+`backend/tests/test_validation.py`, one behavior first:
 ```python
-from datetime import datetime
-from typing import Optional
+import uuid
+import pytest
+from pydantic import ValidationError
+
+from app.validation import CreatePostRequest
+
+
+def test_rejects_empty_content():
+    with pytest.raises(ValidationError):
+        CreatePostRequest(author_id=uuid.uuid4(), content="")
+```
+
+Run `pytest` → red (`app.validation` doesn't exist yet).
+
+`backend/app/validation.py`, just enough to go green:
+```python
 from uuid import UUID
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field
 
 
 class CreatePostRequest(BaseModel):
     author_id: UUID
     content: str = Field(min_length=1, max_length=500)
+```
+
+Run `pytest` → green. Commit:
+```bash
+git add backend/app/validation.py backend/tests/test_validation.py
+git commit -m "Add CreatePostRequest validation with TDD (reject empty content)"
+```
+
+Next behavior — self-follow rejection. Add the test first:
+```python
+from app.validation import FollowRequest
+
+
+def test_rejects_self_follow():
+    same_id = uuid.uuid4()
+    with pytest.raises(ValidationError):
+        FollowRequest(follower_id=same_id, following_id=same_id)
+```
+
+Red, then implement:
+```python
+from typing import Optional
+from datetime import datetime
+from pydantic import model_validator
 
 
 class FollowRequest(BaseModel):
@@ -334,12 +328,51 @@ class FeedQuery(BaseModel):
 
 **Why `pydantic`, same reasoning as `zod` before:** shape validation (`min_length`, `UUID` parsing) is declarative; `model_validator` is pydantic's equivalent of zod's `.refine()` — for rules that depend on *more than one field at once*, which a per-field check can't express.
 
-**Why this stays a separate module from the routes:** testable with zero Flask app, zero HTTP request, zero database — exactly the same motivation as before.
+Green, then commit:
+```bash
+git add backend/app/validation.py backend/tests/test_validation.py
+git commit -m "Add FollowRequest self-follow rejection with TDD"
+```
 
----
+(`FeedQuery` has no behavior of its own to test yet — it's exercised once `feed.py` and the routes use it. Adding a test for a model with no validation logic would just be testing pydantic itself.)
 
-## 4. Backend: Feed query builder — `backend/app/feed.py`
+### 3b. Feed query builder
 
+`backend/tests/test_feed.py`, first behavior:
+```python
+def test_build_feed_query_no_cursor():
+    from app.feed import build_feed_query
+    text, params = build_feed_query("user-1")
+    assert params == ["user-1"]
+    assert "created_at < %s" not in text
+```
+
+Red, then the smallest implementation:
+```python
+def build_feed_query(user_id, cursor=None):
+    params = [str(user_id)]
+    text = """
+        SELECT p.id, p.content, p.author_id, p.created_at
+        FROM posts p
+        WHERE p.author_id = ANY(
+            SELECT following_id FROM follows WHERE follower_id = %s
+        )
+        ORDER BY p.created_at DESC
+        LIMIT 20
+    """
+    return text, params
+```
+
+Green. Next behavior — the cursor branch:
+```python
+def test_build_feed_query_with_cursor():
+    from app.feed import build_feed_query
+    text, params = build_feed_query("user-1", "2026-01-01T00:00:00Z")
+    assert params == ["user-1", "2026-01-01T00:00:00Z"]
+    assert "created_at < %s" in text
+```
+
+Red, then extend the implementation to go green:
 ```python
 def build_feed_query(user_id, cursor=None):
     params = [str(user_id)]
@@ -366,47 +399,21 @@ def build_feed_query(user_id, cursor=None):
 
 **Same known limitation as before, carried over on purpose:** fan-out-on-read. Not a bug, a deliberately deferred optimization — see `architecture.md`'s Future Work section.
 
----
-
-## 5. Backend: Tests — `backend/tests/test_feed.py`
-
-```python
-import uuid
-import pytest
-from pydantic import ValidationError
-
-from app.feed import build_feed_query
-from app.validation import CreatePostRequest, FollowRequest
-
-
-def test_build_feed_query_no_cursor():
-    text, params = build_feed_query("user-1")
-    assert params == ["user-1"]
-    assert "created_at < %s" not in text
-
-
-def test_build_feed_query_with_cursor():
-    text, params = build_feed_query("user-1", "2026-01-01T00:00:00Z")
-    assert params == ["user-1", "2026-01-01T00:00:00Z"]
-    assert "created_at < %s" in text
-
-
-def test_rejects_empty_content():
-    with pytest.raises(ValidationError):
-        CreatePostRequest(author_id=uuid.uuid4(), content="")
-
-
-def test_rejects_self_follow():
-    same_id = uuid.uuid4()
-    with pytest.raises(ValidationError):
-        FollowRequest(follower_id=same_id, following_id=same_id)
+Green, then commit:
+```bash
+git add backend/app/feed.py backend/tests/test_feed.py
+git commit -m "Add feed query builder with TDD (cursor and no-cursor cases)"
 ```
 
-Run: `pytest` from `backend/` — should pass with **no database running**, same as before. Write this alongside step 4, before wiring routes — same "prove the logic in isolation first" order as the original spike.
+Run: `pytest` from `backend/` — everything above should pass with **no database running**. Push the branch, open the PR, and **stop for a design check-in before merging** — this is the query Phase 1's load test measures.
+
+```bash
+git push -u origin feat/flask-validation-feed
+```
 
 ---
 
-## 6. Backend: Routes
+## 4. Backend: Routes
 
 `backend/app/__init__.py` (the app factory):
 ```python
@@ -541,9 +548,15 @@ pytest
 ruff
 ```
 
+Commit once the app boots (`flask --app wsgi run` starts without error) — this is wiring, not TDD, so there's no red/green loop, just a working state to commit:
+```bash
+git add backend/app/__init__.py backend/wsgi.py backend/app/routes/ backend/requirements.txt
+git commit -m "Wire up Flask routes for posts, follow, and feed"
+```
+
 ---
 
-## 7. Backend: Seed script — `backend/scripts/seed.py`
+## 5. Backend: Seed script — `backend/scripts/seed.py`
 
 ```python
 from app.db import pool
@@ -577,9 +590,15 @@ if __name__ == "__main__":
 
 Run: `python -m scripts.seed` from `backend/`. Same deliberately small, specific seed data as before — easy to eyeball correctness.
 
+Commit once it runs cleanly against a real Postgres:
+```bash
+git add backend/scripts/seed.py
+git commit -m "Add seed script for alice/bob/carol fixture data"
+```
+
 ---
 
-## 8–9. Frontend: React scaffold + API wiring
+## 6–7. Frontend: React scaffold + API wiring
 
 ```bash
 npm create vite@latest frontend -- --template react-ts
@@ -625,29 +644,29 @@ export async function follow(followerId: string, followingId: string) {
 
 A single `Feed` component calling `getFeed` on mount is enough to prove the wiring end to end — this doc isn't trying to spec the UI, just get the three endpoints reachable from a real browser.
 
-**Why `flask-cors` was needed back in step 6:** Vite's dev server runs on `localhost:5173`, Flask on `localhost:5000` — different origin, so without CORS headers the browser blocks the fetch outright regardless of whether the backend logic is correct.
+**Why `flask-cors` was needed back in step 4:** Vite's dev server runs on `localhost:5173`, Flask on `localhost:5000` — different origin, so without CORS headers the browser blocks the fetch outright regardless of whether the backend logic is correct.
+
+Commit once the scaffold builds and the Feed component renders against local Flask:
+```bash
+git add frontend/
+git commit -m "Scaffold React frontend and wire up API calls"
+```
 
 ---
 
-## 10. CI pipeline
-
-Covered above in the DevOps section — create `.github/workflows/ci.yml` with that content, push it on `chore/ci-pipeline`, open the PR, watch both jobs go green, then go back and turn on the branch protection rule (step 0 mentioned this, but it only makes sense to require checks *after* the workflow file exists and has run at least once).
-
----
-
-## 12. Deploy
+## 8. Deploy
 
 Backend → **Fly.io or Render** (Docker not required — both platforms build a Python app from a `Procfile`/buildpack without you writing a Dockerfile at this stage). Frontend → **Vercel**.
 
 - Set `DATABASE_URL` as an environment variable/secret on the backend host, not in a committed file
 - Set `VITE_API_URL` on Vercel to the deployed backend's URL
 - Update `flask-cors`'s allowed origins (or the deployed frontend's config) so the deployed frontend can actually call the deployed backend — this is the most common thing to trip on, since it only surfaces once both sides are live, not in local dev
-- Do this as soon as steps 0–9 are mergeable, even if the deployed app is barely functional — deploy pain (env vars, CORS, build config) is cheaper to hit now than at the end
+- Do this as soon as the steps above are mergeable, even if the deployed app is barely functional — deploy pain (env vars, CORS, build config) is cheaper to hit now than at the end
 - A `deploy.yml` triggered on merge-to-`main` is optional here; manual deploy is fine for Phase 0 — automate it later if it becomes friction
 
 ---
 
-## 11. Manual end-to-end verification
+## 9. Manual end-to-end verification
 
 ```bash
 # terminal 1
@@ -662,7 +681,7 @@ cd frontend && npm run dev
 curl "http://localhost:5000/feed?userId=<alice-id-from-seed-output>"
 ```
 
-Expect Carol's post first (posted later), then Bob's. Confirm the same thing renders in the browser at `localhost:5173` — then repeat the check against the deployed URLs from step 12. Local-only verification doesn't count as done; the deploy is where CORS/env-var mistakes actually show up.
+Expect Carol's post first (posted later), then Bob's. Confirm the same thing renders in the browser at `localhost:5173` — then repeat the check against the deployed URLs from step 8. Local-only verification doesn't count as done; the deploy is where CORS/env-var mistakes actually show up.
 
 ---
 
@@ -673,3 +692,71 @@ Expect Carol's post first (posted later), then Bob's. Confirm the same thing ren
 - No async fan-out worker.
 - Fan-out-on-read — will get slow for users following many accounts, or accounts with many followers. See `architecture.md` → Future Work.
 - No deploy pipeline yet — CI (test-on-PR) is step 10; CD (auto-deploy-on-merge) is deliberately deferred until there's something worth shipping.
+
+---
+
+## Appendix: Git & DevOps concepts
+
+Background and workflow reference — not steps to execute, just the mental model behind steps 0–9 above.
+
+### Understanding Git — core concepts
+
+You asked to actually understand this, not just copy commands, so here's the mental model. Everything else in this doc (branches, PRs, CI) is built on these five ideas:
+
+| Concept | What it actually is |
+|---|---|
+| **Commit** | An immutable snapshot of the whole repo at a point in time, plus a pointer to its parent commit(s). History is a chain of these. |
+| **Branch** | Just a movable label pointing at one commit. `main` is not special to git — it's a branch by convention. Creating a branch is instant and cheap (it's not a copy of files). |
+| **HEAD** | A pointer to "where you are right now" — normally it points at a branch, which points at a commit. |
+| **Staging area (the index)** | `git add` doesn't commit — it moves changes into a holding area. `git commit` snapshots *what's staged*, not everything you've changed. This is what lets you commit half your changes and leave the rest for later. |
+| **Remote (`origin`)** | A copy of the repo's history living elsewhere (GitHub, in your case). Your local repo and GitHub only sync when you tell them to: `git push` (local → remote), `git pull` (remote → local, = fetch + merge), `git fetch` (remote → local, but don't merge yet — just look). |
+
+Two more that matter once you're branching:
+
+- **Merge**: combine two branches' histories into one, creating a new commit with two parents. Nothing is rewritten — safe on shared branches.
+- **Rebase**: replay your branch's commits one-by-one on top of another branch's tip, as if you'd started there. Produces a straight line, no merge commit — but it *rewrites* commit hashes. Rule of thumb: rebase your own not-yet-pushed or not-yet-shared branch to keep it current with `main`; never rebase a branch someone else is also working on.
+- **Pull Request (PR)**: not a git concept at all — it's a GitHub feature. It's a UI wrapper around "merge branch A into branch B" that adds a diff view, comments, and (critically) a gate: required CI checks and/or reviews before the merge button unlocks.
+
+The commands you'll actually type, in order, every single feature:
+
+```bash
+git checkout main && git pull          # start from the latest main
+git checkout -b feat/some-small-thing  # branch, cheap and instant
+# ...edit files...
+git status                             # see what changed
+git diff                               # see the actual line changes
+git add backend/app/validation.py      # stage specific files (not -A — be deliberate)
+git commit -m "Add pydantic validation schemas"
+git push -u origin feat/some-small-thing   # -u sets the upstream, only needed the first push
+```
+
+Then open a PR (`gh pr create --fill` or the GitHub UI), let CI run, review your own diff, merge, then:
+
+```bash
+git checkout main && git pull
+git branch -d feat/some-small-thing    # delete the now-merged local branch
+```
+
+### Should you be using PRs? Yes — even solo
+
+A PR gate isn't about needing someone else's approval. Solo, it buys you three things:
+
+1. **A forced second look.** Reading your own diff in GitHub's UI, outside your editor, catches things a self-review inside VS Code doesn't — leftover `print()`s, a variable you meant to rename, an accidental file.
+2. **CI runs automatically before anything touches `main`.** Once step 10 is wired up, every PR gets tested before it's mergeable — `main` stays in a state you could deploy at any moment.
+3. **A real history.** `git log --oneline main` becomes a changelog of actual features, not "wip", "fix", "asdf".
+
+#### Can you build features "in parallel"?
+
+Two different things people mean by this:
+
+**1. Sequenced-but-independent branches (the one you'll actually use).** Nothing stops you from cutting `feat/flask-routes` off `main` while `feat/react-scaffold`'s PR is still open waiting on CI or your own review. Branches are cheap — cut one per checklist item above, each becomes a small, easy-to-review PR (rule of thumb: keep diffs under ~300–400 lines; if a branch is ballooning, that's a sign to land part of it and split the rest).
+
+**2. Literally simultaneous, on disk — `git worktree`.** Normally a folder can only have one branch checked out at a time. `git worktree add ../twitter-clone-feed feat/flask-feed-query` checks out a *second* branch into a *second* folder, both sharing the same `.git` history underneath. That means two editor windows, two branches, no stashing to switch context — genuinely useful once you have, say, a long test suite running against one branch while you write code on another. For this project's size, #1 is where the real value is; worktrees are worth knowing about, not necessary yet.
+
+### Other DevOps practices worth adopting here
+
+- **Secrets never in git.** `backend/.env` (holds `DATABASE_URL`) goes in `.gitignore`; commit a `backend/.env.example` with the shape but no real value instead. The *test* `DATABASE_URL` in step 10's CI workflow is thrown away every CI run (fresh container), so it's fine to keep the dummy `postgres:postgres` credentials in plaintext in the workflow file — anything real (a production deploy key, later) goes in **Settings → Secrets and variables → Actions**, referenced as `${{ secrets.NAME }}`.
+- **Dependabot** (`.github/dependabot.yml`) — opens automatic PRs bumping `requirements.txt`/`package.json` versions, gated by the same CI job. Cheap to add, catches drift before it becomes a big-bang upgrade.
+- **Conventional commit messages** (`feat: add feed route`, `fix: off-by-one in cursor`, `chore: bump ruff`) — not enforced by anything here, just a habit that makes `git log` skimmable later.
+- **Deploy pipeline is a deliberately separate, later step.** Once there's something worth shipping, a `deploy.yml` triggered on merge-to-`main` (Render/Fly.io/Railway for Flask, Vercel/Netlify for the Vite build) is the natural next piece — not needed to start building.
+</content>
