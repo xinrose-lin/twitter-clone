@@ -1,26 +1,52 @@
-# Twitter Baseline (v2) — Build Guide
+# Twitter Baseline (v2) — Build Guide — Phase 0 (MVP v0)
 
 Stack: **Python + Flask + `psycopg` (no ORM) + Postgres backend, React (Vite) frontend**
 Same architecture as `architecture.md` — this is a language/framework swap, not a redesign. If you already ran the schema in the first (Next.js) spike, you can reuse that same Postgres database; the tables don't change.
 
-Goal: same naive, working feed (create post → follow → view feed) as the first spike, but this time also used as a vehicle to practice a real branch → PR → CI workflow.
+Goal: same naive, working feed (create post → follow → view feed) as the first spike, but this time also used as a vehicle to practice a real branch → PR → CI workflow. This is **Phase 0** of `roadmap.md`'s phased plan — fan-out-on-read, no cache, no Docker, no auth hardening. Those are deliberately deferred to later phases; see "What NOT to do in Phase 0" below.
 
 ---
 
-## Progress
+## Definition of done for Phase 0
 
-- [ ] 0. Repo setup — `.gitignore`, folder structure, GitHub branch protection
+- [ ] `GET /feed`, `POST /posts`, `PUT/DELETE /users/:id/follow` all work against a real Postgres, via fan-out-on-read
+- [ ] `pytest` passes locally and in CI, with real coverage on the feed query and validation (not just happy-path)
+- [ ] React frontend can create a post, follow a user, and render a feed against the real deployed API
+- [ ] Every PR since `chore/repo-setup` went through CI, not a direct push to `main`
+- [ ] Backend deployed (Fly.io or Render) and frontend deployed (Vercel), reachable over the public internet
+- [ ] `README.md` states the Phase 0 scope and explicitly lists what's deferred (cache, fan-out-on-write, auth hardening, Docker) as forward-looking, not forgotten
+
+If any of these is missing, Phase 1's load test won't be measuring the thing you actually intend to improve later — don't skip ahead.
+
+## What NOT to do in Phase 0
+
+Resist adding these even if they'd be easy right now — each has a later phase where it's the actual point, and building it early means that phase's load test has nothing naive left to measure:
+
+- Redis / caching of any kind
+- Fan-out-on-write / precomputed feeds
+- Docker or Docker Compose
+- JWT auth, rate limiting, password hashing (Phase 3 buffer work)
+- Prometheus/Grafana (Phase 4)
+
+---
+
+## Progress — execution order
+
+CI goes **first**, not last (step 10 further down is the code for it, but build it before everything else). Standing up the pipeline against a near-empty app is cheap, and it means every subsequent PR is CI-gated from the start instead of retrofitted at the end. The numbers below match the `##` section headers later in this doc, just reordered.
+
+- [ ] 10. CI: `.github/workflows/ci.yml` (lint + test both apps on every PR) — do this first, expect it to fail until step 6 exists, then merge and turn on branch protection
+- [ ] 0. Repo setup — `.gitignore`, folder structure
 - [ ] 1. Schema — reuse or re-run `users` / `follows` / `posts` in Postgres
 - [ ] 2. Backend: DB connection pool — `backend/app/db.py`
 - [ ] 3. Backend: Validation — `backend/app/validation.py`
-- [ ] 4. Backend: Feed query builder — `backend/app/feed.py`
+- [ ] 4. Backend: Feed query builder — `backend/app/feed.py` — **stop for a design check-in before merging**; this is the query Phase 1's load test measures
 - [ ] 5. Backend: Tests — `backend/tests/test_feed.py`
 - [ ] 6. Backend: Routes — `backend/app/routes/{posts,follow,feed}.py`
 - [ ] 7. Backend: Seed script — `backend/scripts/seed.py`
 - [ ] 8. Frontend: Vite + React scaffold — `frontend/`
 - [ ] 9. Frontend: wire up fetch calls to the three endpoints
-- [ ] 10. CI: `.github/workflows/ci.yml` (lint + test both apps on every PR)
-- [ ] 11. Manual end-to-end verification (seed → curl → browser)
+- [ ] 12. Deploy — backend to Fly.io/Render, frontend to Vercel (do this as soon as 0–9 are mergeable, don't save it for the end)
+- [ ] 11. Manual end-to-end verification (seed → curl → browser, against the deployed app, not just localhost)
 
 ---
 
@@ -84,6 +110,7 @@ Two different things people mean by this:
 
 ```
 main                              ← protected, always green
+ ├─ chore/ci-pipeline             (step 10 — build this first)
  ├─ chore/repo-setup              (step 0)
  ├─ feat/flask-db-connection      (steps 1–2)
  ├─ feat/flask-validation-feed    (steps 3–4, written + tested together)
@@ -91,7 +118,7 @@ main                              ← protected, always green
  ├─ chore/seed-script             (step 7)
  ├─ feat/react-scaffold           (step 8)
  ├─ feat/react-api-integration    (step 9)
- └─ chore/ci-pipeline             (step 10)
+ └─ chore/deploy                  (step 12)
 ```
 
 ---
@@ -185,7 +212,12 @@ jobs:
 - **Deploy pipeline is a deliberately separate, later step.** Once there's something worth shipping, a `deploy.yml` triggered on merge-to-`main` (Render/Fly.io/Railway for Flask, Vercel/Netlify for the Vite build) is the natural next piece — not needed to start building.
 
 ---
+```
+git checkout -b chore/repo-setup
+git add . 
+git commit -m "Add v2 architecture doc, tasks.md, and .gitignore for Flask/React stack"
 
+```
 ## 0. Repo setup
 
 ```bash
@@ -603,6 +635,18 @@ Covered above in the DevOps section — create `.github/workflows/ci.yml` with t
 
 ---
 
+## 12. Deploy
+
+Backend → **Fly.io or Render** (Docker not required — both platforms build a Python app from a `Procfile`/buildpack without you writing a Dockerfile at this stage). Frontend → **Vercel**.
+
+- Set `DATABASE_URL` as an environment variable/secret on the backend host, not in a committed file
+- Set `VITE_API_URL` on Vercel to the deployed backend's URL
+- Update `flask-cors`'s allowed origins (or the deployed frontend's config) so the deployed frontend can actually call the deployed backend — this is the most common thing to trip on, since it only surfaces once both sides are live, not in local dev
+- Do this as soon as steps 0–9 are mergeable, even if the deployed app is barely functional — deploy pain (env vars, CORS, build config) is cheaper to hit now than at the end
+- A `deploy.yml` triggered on merge-to-`main` is optional here; manual deploy is fine for Phase 0 — automate it later if it becomes friction
+
+---
+
 ## 11. Manual end-to-end verification
 
 ```bash
@@ -618,7 +662,7 @@ cd frontend && npm run dev
 curl "http://localhost:5000/feed?userId=<alice-id-from-seed-output>"
 ```
 
-Expect Carol's post first (posted later), then Bob's. Then confirm the same thing renders in the browser at `localhost:5173`.
+Expect Carol's post first (posted later), then Bob's. Confirm the same thing renders in the browser at `localhost:5173` — then repeat the check against the deployed URLs from step 12. Local-only verification doesn't count as done; the deploy is where CORS/env-var mistakes actually show up.
 
 ---
 
