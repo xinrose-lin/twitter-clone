@@ -1,5 +1,6 @@
 # scripts/check_db.py
 from dotenv import load_dotenv
+
 load_dotenv()
 
 from app.db import pool
