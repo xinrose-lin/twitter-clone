@@ -664,6 +664,11 @@ Backend → **Fly.io or Render** (Docker not required — both platforms build a
 - Do this as soon as the steps above are mergeable, even if the deployed app is barely functional — deploy pain (env vars, CORS, build config) is cheaper to hit now than at the end
 - A `deploy.yml` triggered on merge-to-`main` is optional here; manual deploy is fine for Phase 0 — automate it later if it becomes friction
 
+                  id                  | username 
+--------------------------------------+----------
+ f6d85a30-64eb-4ee7-9398-b826d789a229 | alice
+ 48c172fe-3a2e-4779-a404-5548610ac6b6 | bob
+ 9d28730d-3522-461e-b88c-a9472985d981 | carol
 ---
 
 ## 9. Manual end-to-end verification

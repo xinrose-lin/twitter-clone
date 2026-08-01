@@ -1,121 +1,82 @@
-import { useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import './App.css'
-import { createPost, follow, getFeed } from './api'
+import type { Post } from './api'
+import { getFeed } from './api'
+import { USERS } from './data/users'
+import UserSwitcher from './components/UserSwitcher'
+import FeedPage from './components/FeedPage'
+import ProfilePage from './components/ProfilePage'
+import PeoplePage from './components/PeoplePage'
+
+type View = { page: 'feed' } | { page: 'profile'; userId: string } | { page: 'people' }
 
 function App() {
-  return (
-    <section id="center">
-      <h1>API test harness</h1>
-      <p style={{ marginBottom: 24 }}>
-        Seed the backend first (<code>python -m scripts.seed</code>) and
-        paste alice/bob/carol's UUIDs below.
-      </p>
+  const [currentUserId, setCurrentUserId] = useState(USERS[0].id)
+  const [view, setView] = useState<View>({ page: 'feed' })
+  const [posts, setPosts] = useState<Post[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-      <div className="panels">
-        <CreatePostPanel />
-        <FollowPanel />
-        <FeedPanel />
-      </div>
-    </section>
-  )
-}
-
-function CreatePostPanel() {
-  const [authorId, setAuthorId] = useState('')
-  const [content, setContent] = useState('')
-  const [result, setResult] = useState('')
-
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault()
-    setResult('loading...')
+  const loadFeed = useCallback(async () => {
+    setLoading(true)
+    setError(null)
     try {
-      const post = await createPost(authorId, content)
-      setResult(JSON.stringify(post, null, 2))
-    } catch (err) {
-      setResult(String(err))
+      const feed = await getFeed(currentUserId)
+      setPosts(feed.items)
+    } catch {
+      setError('Failed to load feed.')
+    } finally {
+      setLoading(false)
     }
-  }
+  }, [currentUserId])
+
+  useEffect(() => {
+    loadFeed()
+  }, [loadFeed])
 
   return (
-    <form className="panel" onSubmit={handleSubmit}>
-      <h2>POST /posts</h2>
-      <label>
-        author_id
-        <input value={authorId} onChange={(e) => setAuthorId(e.target.value)} placeholder="uuid" required />
-      </label>
-      <label>
-        content
-        <textarea value={content} onChange={(e) => setContent(e.target.value)} required />
-      </label>
-      <button type="submit">Create post</button>
-      {result && <pre>{result}</pre>}
-    </form>
-  )
-}
+    <>
+      <header className="top-bar">
+        <h1 className="logo">tweeter</h1>
+        <nav className="nav-links">
+          <button className="nav-link" onClick={() => setView({ page: 'feed' })}>
+            Feed
+          </button>
+          <button className="nav-link" onClick={() => setView({ page: 'people' })}>
+            People
+          </button>
+          <button className="nav-link" onClick={() => setView({ page: 'profile', userId: currentUserId })}>
+            Profile
+          </button>
+        </nav>
+        <UserSwitcher currentUserId={currentUserId} onChange={setCurrentUserId} />
+      </header>
 
-function FollowPanel() {
-  const [followerId, setFollowerId] = useState('')
-  const [followingId, setFollowingId] = useState('')
-  const [result, setResult] = useState('')
-
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault()
-    setResult('loading...')
-    try {
-      const res = await follow(followerId, followingId)
-      setResult(JSON.stringify(res, null, 2))
-    } catch (err) {
-      setResult(String(err))
-    }
-  }
-
-  return (
-    <form className="panel" onSubmit={handleSubmit}>
-      <h2>POST /follow</h2>
-      <label>
-        follower_id
-        <input value={followerId} onChange={(e) => setFollowerId(e.target.value)} placeholder="uuid" required />
-      </label>
-      <label>
-        following_id
-        <input value={followingId} onChange={(e) => setFollowingId(e.target.value)} placeholder="uuid" required />
-      </label>
-      <button type="submit">Follow</button>
-      {result && <pre>{result}</pre>}
-    </form>
-  )
-}
-
-function FeedPanel() {
-  const [userId, setUserId] = useState('')
-  const [cursor, setCursor] = useState('')
-  const [result, setResult] = useState('')
-
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault()
-    setResult('loading...')
-    try {
-      const feed = await getFeed(userId, cursor || undefined)
-      setResult(JSON.stringify(feed, null, 2))
-    } catch (err) {
-      setResult(String(err))
-    }
-  }
-
-  return (
-    <form className="panel" onSubmit={handleSubmit}>
-      <h2>GET /feed</h2>
-      <label>
-        userId
-        <input value={userId} onChange={(e) => setUserId(e.target.value)} placeholder="uuid" required />
-      </label>
-      <label>
-        cursor (optional)
-        <input value={cursor} onChange={(e) => setCursor(e.target.value)} placeholder="ISO timestamp" />
-      </label>
-      <button type="submit">Load feed</button>
-      {result && <pre>{result}</pre>}
-    </form>
+      <section id="center">
+        {view.page === 'feed' && (
+          <FeedPage
+            posts={posts}
+            loading={loading}
+            error={error}
+            currentUserId={currentUserId}
+            onSelectUser={(userId) => setView({ page: 'profile', userId })}
+            onPostCreated={loadFeed}
+          />
+        )}
+        {view.page === 'profile' && (
+          <ProfilePage
+            profileUserId={view.userId}
+            currentUserId={currentUserId}
+            posts={posts}
+            onSelectUser={(userId) => setView({ page: 'profile', userId })}
+            onBack={() => setView({ page: 'feed' })}
+          />
+        )}
+        {view.page === 'people' && (
+          <PeoplePage currentUserId={currentUserId} onSelectUser={(userId) => setView({ page: 'profile', userId })} />
+        )}
+      </section>
+    </>
   )
 }
 

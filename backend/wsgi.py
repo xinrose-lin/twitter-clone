@@ -1,5 +1,9 @@
-## web server gateway interface - entry point for app 
+## web server gateway interface - entry point for app
 ## liek a run.py but for prod ?
+
+from dotenv import load_dotenv
+
+load_dotenv()
 
 from app import create_app
 
