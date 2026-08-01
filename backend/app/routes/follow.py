@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from flask import Blueprint, jsonify, request
 from pydantic import ValidationError
 
@@ -22,3 +24,22 @@ def follow():
         )
 
     return jsonify({"success": True})
+
+
+@follow_bp.get("/users/<uuid:user_id>/follows")
+def get_follows(user_id: UUID):
+    with pool.connection() as conn:
+        following = conn.execute(
+            "SELECT u.id, u.username FROM follows f "
+            "JOIN users u ON u.id = f.following_id "
+            "WHERE f.follower_id = %s",
+            (str(user_id),),
+        ).fetchall()
+        followers = conn.execute(
+            "SELECT u.id, u.username FROM follows f "
+            "JOIN users u ON u.id = f.follower_id "
+            "WHERE f.following_id = %s",
+            (str(user_id),),
+        ).fetchall()
+
+    return jsonify({"following": following, "followers": followers})

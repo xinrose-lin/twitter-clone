@@ -1,6 +1,13 @@
 const BASE = import.meta.env.VITE_API_URL;
 
-export async function getFeed(userId: string, cursor?: string) {
+export type Post = {
+  id: string;
+  content: string;
+  author_id: string;
+  created_at: string;
+};
+
+export async function getFeed(userId: string, cursor?: string): Promise<{ items: Post[] }> {
   const params = new URLSearchParams({ userId, ...(cursor && { cursor }) });
   const res = await fetch(`${BASE}/feed?${params}`);
   if (!res.ok) throw new Error("Failed to load feed");
@@ -14,6 +21,17 @@ export async function createPost(authorId: string, content: string) {
     body: JSON.stringify({ author_id: authorId, content }),
   });
   if (!res.ok) throw new Error("Failed to create post");
+  return res.json();
+}
+
+export type FollowedUser = {
+  id: string;
+  username: string;
+};
+
+export async function getFollows(userId: string): Promise<{ following: FollowedUser[]; followers: FollowedUser[] }> {
+  const res = await fetch(`${BASE}/users/${userId}/follows`);
+  if (!res.ok) throw new Error("Failed to load follows");
   return res.json();
 }
 
