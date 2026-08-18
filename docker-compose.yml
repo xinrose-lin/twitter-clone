@@ -24,5 +24,26 @@ services:
     ports:
       - "5001:5000"
 
+  prometheus:
+    image: prom/prometheus
+    volumes:
+      - ./backend/observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    depends_on:
+      - api
+
+  grafana:
+    image: grafana/grafana
+    # environment:
+      # GF_PLUGINS_PREINSTALL_DISABLED: "true"
+    volumes:
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+
 volumes:
   twitter-pgdata:
+  grafana-data:
