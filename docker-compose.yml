@@ -1,0 +1,28 @@
+services:
+  postgres:
+    image: postgres:18          
+    environment:
+      POSTGRES_USER: twitter_clone
+      POSTGRES_PASSWORD: twitter_clone
+      POSTGRES_DB: twitter_clone
+    volumes:
+      - ./backend/db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - twitter-pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U twitter_clone"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      
+  api:
+    build: ./backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://twitter_clone:twitter_clone@postgres:5432/twitter_clone
+    ports:
+      - "5001:5000"
+
+volumes:
+  twitter-pgdata:
