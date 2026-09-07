@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: postgres:18          
+    image: postgres:18
     environment:
       POSTGRES_USER: twitter_clone
       POSTGRES_PASSWORD: twitter_clone
@@ -13,7 +13,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
-      
+
   api:
     build: ./backend
     depends_on:
@@ -38,6 +38,8 @@ services:
     # environment:
       # GF_PLUGINS_PREINSTALL_DISABLED: "true"
     volumes:
+      - ./backend/observability/grafana/provisioning:/etc/grafana/provisioning
+      - ./backend/observability/grafana/dashboards:/etc/grafana/provisioning/dashboards/files
       - grafana-data:/var/lib/grafana
     ports:
       - "3000:3000"
