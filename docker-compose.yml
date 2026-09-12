@@ -7,6 +7,10 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    ports: 
+      - "6379:6379"
+
+
   postgres:
     image: postgres:18
     environment:
@@ -21,6 +25,8 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    ports:
+      - "5433:5432"
 
   api:
     build: ./backend
