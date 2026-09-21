@@ -3,3 +3,4 @@ workers = 1
 worker_class = "gthread"
 threads = 2
 timeout = 30
+reload = True

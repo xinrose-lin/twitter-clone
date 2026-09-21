@@ -12,6 +12,7 @@ posts_bp = Blueprint("posts", __name__)
 def create_post():
     try:
         data = CreatePostRequest(**request.get_json())
+        print('data', data)
     except ValidationError as e:
         return jsonify({"error": e.errors()}), 400
 

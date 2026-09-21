@@ -35,10 +35,13 @@ def get_follower_ids(user_id):
     return [row['follower_id'] for row in rows]
 
 def fanout_post(post, follower_ids):
-    ## fanout to redis cache for each follower, 
+    ## fanout to redis cache for each follower, batched into one pipeline
+    ## to avoid N sequential round-trips (was: lpush+ltrim per follower)
+    pipe = redis_client.pipeline()
     for follower_id in follower_ids:
         # lpush serialised post onto timeline:<follower_id>
-        redis_client.lpush(f"timeline:{follower_id}", 
-                           json.dumps(post, default=str))
+        pipe.lpush(f"timeline:{follower_id}",
+                   json.dumps(post, default=str))
         # ltrim to cap timeline at 200
-        redis_client.ltrim(f"timeline:{follower_id}", 0, 199)
+        pipe.ltrim(f"timeline:{follower_id}", 0, 199)
+    pipe.execute()

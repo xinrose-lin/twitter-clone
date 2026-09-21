@@ -39,6 +39,9 @@ services:
       DATABASE_URL: postgresql://twitter_clone:twitter_clone@postgres:5432/twitter_clone
       REDIS_URL: redis://redis:6379/0
       CACHE_ENABLED: "true"
+      FANOUT_ENABLED: "${FANOUT_ENABLED:-false}"
+    volumes:
+      - ./backend:/app
     ports:
       - "5001:5000"
 

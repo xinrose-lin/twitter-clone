@@ -10,6 +10,12 @@ from app.validation import FeedQuery
 feed_bp = Blueprint("feed", __name__)
 
 
+def _query_postgres_feed(query): 
+    text, params = build_feed_query(str(query.user_id), query.cursor)
+    with pool.connection() as conn:
+        rows = conn.execute(text, params).fetchall()
+    return rows
+
 @feed_bp.get("/feed")
 def feed():
 
@@ -22,32 +28,32 @@ def feed():
     except ValidationError as e:
         return jsonify({"error": e.errors()}), 400
 
-    ## build cache key 
-    cache_key = feed_cache_key(query.user_id, query.cursor)
-    ## get from cache
-    if CACHE_ENABLED and not FANOUT_ENABLED: 
-        cached_feed = redis_client.get(cache_key)
-        if cached_feed: 
-            return jsonify({"items": json.loads(cached_feed)})
-
-    elif FANOUT_ENABLED:
-        ##get lrange timeline from redis 
+    strategy = request.args.get("strategy", "nocache")
+    # print(f"strategy requested: {strategy}")
+    if strategy == "fanout": 
+       ##get lrange timeline from redis 
         timeline_key = f"timeline:{query.user_id}"
         cached_feed = redis_client.lrange(timeline_key, 0, 19)
         ## i want to see the data strcuture of this output
         print(f"cached_feed: {cached_feed}")
 
         return jsonify({"items": [json.loads(post) for post in cached_feed]})
-    ## build SQL query and params
-    text, params = build_feed_query(str(query.user_id), query.cursor)
-    with pool.connection() as conn:
-        rows = conn.execute(text, params).fetchall()
 
-    ## if cache missed; store db text, params to cache
-    if CACHE_ENABLED: 
+    elif strategy == "cacheaside":
+        cache_key = feed_cache_key(query.user_id, query.cursor)
+        cached_feed = redis_client.get(cache_key)
+        if cached_feed: 
+            return jsonify({"items": json.loads(cached_feed)}) 
+
+        rows = _query_postgres_feed(query)
         redis_client.set(cache_key, json.dumps(rows, default=str), ex=FEED_TTL_SECONDS)
+        return jsonify({"items": rows})
 
-
-
+    elif strategy == "nocache": 
+        ##code repeated here tho
+        rows = _query_postgres_feed(query)
+    else: 
+        return "Invalid strategy. Must be one of 'fanout', 'cacheaside', or 'nocache'." , 400
+    
     return jsonify({"items": rows})
 
