@@ -6,3 +6,7 @@ python-dotenv
 pytest
 ruff
 gunicorn
+
+prometheus-client
+redis
+requests 

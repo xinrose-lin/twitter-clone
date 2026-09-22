@@ -1,0 +1,4 @@
+Method,Name,Error,Occurrences,First Seen,Last Seen
+GET,/feed,RemoteDisconnected('Remote end closed connection without response'),1321,2026-08-25T11:40:58Z,2026-08-25T11:53:11Z
+POST,/posts,RemoteDisconnected('Remote end closed connection without response'),288,2026-08-25T11:40:55Z,2026-08-25T11:53:11Z
+POST,/follow,RemoteDisconnected('Remote end closed connection without response'),149,2026-08-25T11:43:57Z,2026-08-25T11:53:11Z

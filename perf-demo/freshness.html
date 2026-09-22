@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Feed Freshness Demo</title>
+<style>
+  body { font-family: -apple-system, sans-serif; max-width: 1100px; margin: 40px auto; padding: 0 16px; }
+  h1 { font-size: 20px; margin-bottom: 4px; }
+  .sub { color: #666; font-size: 13px; margin-bottom: 20px; }
+  section.panel { border: 1px solid #eee; border-radius: 8px; padding: 0; margin-bottom: 16px; overflow: hidden; }
+  section.panel > h3 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: #888; margin: 0; padding: 10px 16px; background: #fafafa; border-bottom: 1px solid #eee; }
+  .api-base-field { max-width: 320px; margin-bottom: 20px; }
+  .settings-row { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; padding: 12px 16px; border-bottom: 1px solid #f0f0f0; }
+  .field { flex: 1; min-width: 160px; }
+  label { display: block; margin-bottom: 4px; font-size: 12px; color: #888; }
+  input, textarea { padding: 6px 8px; font-size: 14px; width: 100%; box-sizing: border-box; font-family: inherit; }
+  textarea { resize: vertical; }
+  button { padding: 8px 14px; font-size: 14px; cursor: pointer; }
+
+  /* profile header + composer */
+  .profile-header { display: flex; gap: 12px; align-items: center; padding: 16px; }
+  .avatar-lg { width: 48px; height: 48px; border-radius: 50%; background: #cbd5e1; color: #334155;
+               display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 600; flex-shrink: 0; }
+  .profile-name { font-weight: 700; font-size: 15px; }
+  .profile-handle { color: #888; font-size: 13px; }
+  .composer { display: flex; gap: 10px; align-items: flex-start; padding: 0 16px 16px; }
+  .composer textarea { flex: 1; }
+  #markerStatus { font-size: 12px; color: #888; padding: 0 16px 12px; }
+
+  /* feed columns */
+  .columns { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .col { border: 1px solid #ddd; border-radius: 8px; overflow: hidden; }
+  .col-header { background: #fafafa; border-bottom: 1px solid #eee; padding: 10px 12px; }
+  .col-header h2 { font-size: 14px; margin: 0; text-transform: capitalize; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 12px; margin-left: 6px; }
+  .badge.yes { background: #dcfce7; color: #166534; }
+  .badge.no { background: #fee2e2; color: #991b1b; }
+  .badge.unknown { background: #eee; color: #666; }
+  .meta { font-size: 11px; color: #999; margin-top: 4px; }
+  .items { max-height: 320px; overflow-y: auto; padding: 0 12px; }
+  .col-footer { padding: 10px 12px; border-top: 1px solid #f0f0f0; }
+  .col-footer button { width: 100%; }
+
+  .tweet { display: flex; gap: 8px; padding: 10px 0; border-bottom: 1px solid #f0f0f0; }
+  .tweet:last-child { border-bottom: none; }
+  .avatar { width: 32px; height: 32px; border-radius: 50%; background: #cbd5e1; color: #334155;
+            display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; flex-shrink: 0; }
+  .tweet-body { font-size: 13px; min-width: 0; }
+  .tweet-head { color: #555; }
+  .tweet-head .handle { color: #888; font-weight: normal; }
+  .tweet-text { margin-top: 2px; word-wrap: break-word; }
+  .tweet.marker { background: #fffbe6; margin: 0 -12px; padding: 10px 12px; }
+  .tweet.marker .avatar { background: #fde68a; color: #854d0e; }
+</style>
+</head>
+<body>
+
+<h1>Feed Freshness Demo</h1>
+<p><a href="index.html">← Latency demo</a></p>
+<div class="sub">Post a tweet, then poll each strategy independently and watch when it shows up.</div>
+
+<div class="field api-base-field">
+  <label for="apiBase">API base URL</label>
+  <input id="apiBase" value="http://localhost:5001">
+</div>
+
+<section class="panel">
+  <h3>User Posting</h3>
+  <div class="settings-row">
+    <div class="field">
+      <label for="authorId">Author ID (someone the viewer follows)</label>
+      <input id="authorId" value="009e7cbf-d407-4cdd-9475-54338cff7454">
+    </div>
+    <div class="field">
+      <label for="authorName">Display name</label>
+      <input id="authorName" value="alice">
+    </div>
+  </div>
+  <div class="profile-header">
+    <div class="avatar-lg" id="profileAvatar">AL</div>
+    <div>
+      <div class="profile-name" id="profileName">alice</div>
+      <div class="profile-handle" id="profileHandle">@alice</div>
+    </div>
+  </div>
+  <div class="composer">
+    <textarea id="tweetInput" rows="2" placeholder="What's happening?"></textarea>
+    <button id="createBtn">Post tweet</button>
+  </div>
+  <div id="markerStatus"></div>
+  <div class="items" id="profilePosts"></div>
+</section>
+
+<section class="panel">
+  <h3>User Viewing</h3>
+  <div class="settings-row" style="border-bottom: none;">
+    <div class="field">
+      <label for="viewerId">Viewer ID (the follower whose feed you're reading)</label>
+      <input id="viewerId" value="d220cbf2-d52f-4230-8c63-9be15ff2fb5e">
+    </div>
+    <div class="field">
+      <label for="viewerName">Display name</label>
+      <input id="viewerName" value="bob">
+    </div>
+  </div>
+  <div class="profile-header">
+    <div class="avatar-lg" id="viewerAvatar">BO</div>
+    <div>
+      <div class="profile-name" id="viewerNameDisplay">bob</div>
+      <div class="profile-handle" id="viewerHandleDisplay">@bob</div>
+    </div>
+  </div>
+</section>
+
+<div class="columns" id="columns"></div>
+
+<script>
+  const FEED_TTL_SECONDS = 45; // must match backend app/cache.py FEED_TTL_SECONDS
+  const CACHE_MISS_THRESHOLD_MS = 8; // hits are ~1-2ms, misses hit Postgres (~20-40ms) — see session4-cache-results.md
+
+  const SAMPLE_TWEETS = [
+    'just shipped a new feature 🚀',
+    'coffee > sleep',
+    'debugging in prod, wish me luck 😅',
+    'PRs reviewed: 0. PRs opened: 12.',
+    'systems design is just informed guessing with confidence',
+    'redis is down and so is my mood',
+    'shipped it. broke it. fixed it. lunch.',
+  ];
+
+  const STRATEGIES = ['fanout', 'cacheaside', 'nocache'];
+  let markerContent = null;
+  let cacheasideExpiresAt = null; // epoch ms, inferred from latency, cacheaside only
+  const clientPosts = []; // this session's own echo of what we've posted — no GET /users/:id/posts endpoint to read it back from
+
+  function apiBase() { return document.getElementById('apiBase').value.trim(); }
+  function authorId() { return document.getElementById('authorId').value.trim(); }
+  function authorName() { return document.getElementById('authorName').value.trim() || 'anon'; }
+  function viewerId() { return document.getElementById('viewerId').value.trim(); }
+  function viewerName() { return document.getElementById('viewerName').value.trim() || 'anon'; }
+
+  function initials(name) {
+    return name.slice(0, 2).toUpperCase();
+  }
+
+  const PSEUDO_FIRST_NAMES = ['jordan', 'riley', 'sam', 'taylor', 'morgan', 'casey', 'drew', 'quinn', 'avery', 'parker', 'reese', 'skyler'];
+
+  // deterministic per author_id so the same author always renders the same
+  // name across polls, without a real username lookup endpoint
+  function pseudoName(authorId) {
+    let hash = 0;
+    for (let i = 0; i < authorId.length; i++) {
+      hash = (hash * 31 + authorId.charCodeAt(i)) >>> 0;
+    }
+    const name = PSEUDO_FIRST_NAMES[hash % PSEUDO_FIRST_NAMES.length];
+    const suffix = 100 + (hash % 900);
+    return `${name}${suffix}`;
+  }
+
+  function relativeTime(iso) {
+    const seconds = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
+    if (seconds < 5) return 'just now';
+    if (seconds < 60) return `${seconds}s`;
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes}m`;
+    return `${Math.floor(minutes / 60)}h`;
+  }
+
+  function randomSampleTweet() {
+    return SAMPLE_TWEETS[Math.floor(Math.random() * SAMPLE_TWEETS.length)];
+  }
+
+  function tweetElement(name, content, createdAtIso, isMarker) {
+    const div = document.createElement('div');
+    div.className = 'tweet' + (isMarker ? ' marker' : '');
+    div.innerHTML = `
+      <div class="avatar">${initials(name)}</div>
+      <div class="tweet-body">
+        <div class="tweet-head"><strong>${name}</strong> <span class="handle">· ${relativeTime(createdAtIso)}</span></div>
+        <div class="tweet-text"></div>
+      </div>
+    `;
+    div.querySelector('.tweet-text').textContent = content;
+    return div;
+  }
+
+  function renderProfileHeader() {
+    const name = authorName();
+    document.getElementById('profileAvatar').textContent = initials(name);
+    document.getElementById('profileName').textContent = name;
+    document.getElementById('profileHandle').textContent = `@${name}`;
+  }
+
+  function renderViewerHeader() {
+    const name = viewerName();
+    document.getElementById('viewerAvatar').textContent = initials(name);
+    document.getElementById('viewerNameDisplay').textContent = name;
+    document.getElementById('viewerHandleDisplay').textContent = `@${name}`;
+  }
+
+  function renderProfilePosts() {
+    const list = document.getElementById('profilePosts');
+    list.innerHTML = '';
+    for (const post of [...clientPosts].reverse()) {
+      list.appendChild(tweetElement(post.authorName, post.content, post.createdAt, post.content === markerContent));
+    }
+  }
+
+  async function createTestPost() {
+    const aid = authorId();
+    if (!aid) { document.getElementById('markerStatus').textContent = 'Enter an author ID first.'; return; }
+
+    const input = document.getElementById('tweetInput');
+    let content = input.value.trim() || randomSampleTweet();
+    if (!content.includes('#demo-')) {
+      content = `${content} #demo-${Date.now()}`;
+    }
+    markerContent = content;
+
+    const res = await fetch(`${apiBase()}/posts`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ author_id: aid, content }),
+    });
+    if (!res.ok) {
+      document.getElementById('markerStatus').textContent = `Failed to post: HTTP ${res.status}`;
+      return;
+    }
+
+    clientPosts.push({ content, createdAt: new Date().toISOString(), authorName: authorName() });
+    renderProfilePosts();
+
+    input.value = randomSampleTweet();
+    document.getElementById('markerStatus').textContent = `Posted — now click "Poll now" on each column below to see when it shows up.`;
+  }
+
+  async function pollColumn(strategy) {
+    const vid = viewerId();
+    if (!vid) return;
+
+    const url = `${apiBase()}/feed?${new URLSearchParams({ strategy, userId: vid })}`;
+    const start = performance.now();
+    const res = await fetch(url);
+    const latencyMs = performance.now() - start;
+
+    if (!res.ok) {
+      renderColumn(strategy, { error: `HTTP ${res.status}` });
+      return;
+    }
+    const body = await res.json();
+    const items = body.items || [];
+    const hasMarker = markerContent !== null && items.some(p => p.content === markerContent);
+
+    if (strategy === 'cacheaside') {
+      if (latencyMs > CACHE_MISS_THRESHOLD_MS) {
+        // treat as a cache miss — this response just repopulated the cache with a fresh TTL
+        cacheasideExpiresAt = Date.now() + FEED_TTL_SECONDS * 1000;
+      }
+    }
+
+    renderColumn(strategy, { items, latencyMs, hasMarker, polledAt: new Date() });
+  }
+
+  function renderColumn(strategy, state) {
+    const el = document.getElementById(`col-${strategy}`);
+    const list = el.querySelector('.items');
+    const badge = el.querySelector('.marker-badge');
+    const meta = el.querySelector('.meta');
+
+    if (state.error) {
+      meta.textContent = state.error;
+      return;
+    }
+
+    badge.textContent = state.hasMarker ? 'latest post: present' : 'latest post: absent';
+    badge.className = 'badge marker-badge ' + (state.hasMarker ? 'yes' : 'no');
+
+    meta.textContent = `latency ${state.latencyMs.toFixed(1)}ms — polled ${state.polledAt.toLocaleTimeString()}`;
+
+    list.innerHTML = '';
+    for (const post of state.items.slice(0, 5)) {
+      const isMarker = post.content === markerContent;
+      const name = isMarker ? authorName() : pseudoName(post.author_id || '');
+      list.appendChild(tweetElement(name, post.content, post.created_at, isMarker));
+    }
+  }
+
+  function buildColumns() {
+    const container = document.getElementById('columns');
+    for (const strategy of STRATEGIES) {
+      const col = document.createElement('div');
+      col.className = 'col';
+      col.id = `col-${strategy}`;
+      col.innerHTML = `
+        <div class="col-header">
+          <h2>${strategy} <span class="badge marker-badge unknown">latest post: unknown</span></h2>
+          <div class="ttl-note" style="font-size:11px;color:#999;"></div>
+          <div class="meta">not polled yet</div>
+        </div>
+        <div class="items"></div>
+        <div class="col-footer">
+          <button data-strategy="${strategy}">Poll now</button>
+        </div>
+      `;
+      col.querySelector('button').addEventListener('click', () => pollColumn(strategy));
+      container.appendChild(col);
+    }
+  }
+
+  function tickCacheasideCountdown() {
+    const note = document.querySelector('#col-cacheaside .ttl-note');
+    if (!note) return;
+    if (cacheasideExpiresAt === null) {
+      note.textContent = '';
+      return;
+    }
+    const remainingMs = cacheasideExpiresAt - Date.now();
+    note.textContent = remainingMs > 0
+      ? `cache entry expires in ~${Math.ceil(remainingMs / 1000)}s`
+      : 'cache entry likely expired — next poll should be a miss';
+  }
+
+  document.getElementById('createBtn').addEventListener('click', createTestPost);
+  document.getElementById('authorName').addEventListener('input', renderProfileHeader);
+  document.getElementById('viewerName').addEventListener('input', renderViewerHeader);
+  document.getElementById('tweetInput').value = randomSampleTweet();
+  renderProfileHeader();
+  renderViewerHeader();
+  buildColumns();
+  setInterval(tickCacheasideCountdown, 1000);
+</script>
+</body>
+</html>

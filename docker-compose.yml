@@ -1,0 +1,72 @@
+services:
+  redis: 
+    image: redis:7 # why? 
+    # no vol needed, since we want it to lose state on restart 
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    ports: 
+      - "6379:6379"
+
+
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: twitter_clone
+      POSTGRES_PASSWORD: twitter_clone
+      POSTGRES_DB: twitter_clone
+    volumes:
+      - ./backend/db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - twitter-pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U twitter_clone"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    ports:
+      - "5433:5432"
+
+  api:
+    build: ./backend
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://twitter_clone:twitter_clone@postgres:5432/twitter_clone
+      REDIS_URL: redis://redis:6379/0
+      CACHE_ENABLED: "true"
+      FANOUT_ENABLED: "${FANOUT_ENABLED:-false}"
+    volumes:
+      - ./backend:/app
+    ports:
+      - "5001:5000"
+
+  prometheus:
+    image: prom/prometheus
+    volumes:
+      - ./backend/observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    depends_on:
+      - api
+
+  grafana:
+    image: grafana/grafana
+    # environment:
+      # GF_PLUGINS_PREINSTALL_DISABLED: "true"
+    volumes:
+      - ./backend/observability/grafana/provisioning:/etc/grafana/provisioning
+      - ./backend/observability/grafana/dashboards:/etc/grafana/provisioning/dashboards/files
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+
+volumes:
+  twitter-pgdata:
+  grafana-data:
